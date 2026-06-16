@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anon Secz • Secure Group Calls</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+        
+        :root {
+            --primary: 34 211 238;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .title-font {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+        }
+
+        .neon-glow {
+            box-shadow: 0 0 25px -5px rgb(var(--primary) / 0.5),
+                        0 0 10px -5px rgb(var(--primary) / 0.3);
+        }
+
+        .participant-card {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .participant-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 
+                        0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+
+        .speaking {
+            animation: speakingPulse 1.5s infinite;
+        }
+
+        @keyframes speakingPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(34, 211, 238, 0); }
+        }
+
+        .scanline {
+            position: relative;
+        }
+        .scanline::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(transparent, rgba(34, 211, 238, 0.15), transparent);
+            animation: scan 6s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(300%); } }
+    </style>
+</head>
+<body class="bg-zinc-950 text-slate-200 min-h-screen overflow-hidden">
+    <div class="fixed inset-0 bg-[radial-gradient(at_center,#22d3ee_0.8px,transparent_1px)] [background-size:40px_40px] opacity-10 pointer-events-none"></div>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center p-6">
+        <div class="w-full max-w-lg glass border border-cyan-500/30 rounded-3xl p-10 scanline neon-glow">
+            <div class="text-center mb-10">
+                <div class="flex justify-center mb-6">
+                    <div class="w-20 h-20 bg-cyan-500/10 rounded-2xl flex items-center justify-center border border-cyan-400/30">
+                        <i class="fa-solid fa-headset text-5xl text-cyan-400"></i>
+                    </div>
+                </div>
+                <h1 class="title-font text-5xl font-semibold tracking-tighter text-white">Shadow Voice</h1>
+                <p class="text-cyan-400 mt-2 text-lg">Professional • Encrypted • P2P Group Calls</p>
+            </div>
+
+            <div class="space-y-8">
+                <div>
+                    <label class="block text-xs uppercase tracking-widest text-cyan-400 mb-2 font-medium">Your Callsign</label>
+                    <input id="username" 
+                           type="text" 
+                           placeholder="SHAURYA_MASTER" 
+                           class="w-full bg-zinc-900 border border-cyan-500/50 focus:border-cyan-400 rounded-2xl px-6 py-5 text-xl outline-none text-white placeholder:text-zinc-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="createRoom()" 
+                            class="bg-cyan-500 hover:bg-cyan-400 active:scale-95 transition-all text-black font-semibold py-7 rounded-2xl flex items-center justify-center gap-3 text-lg">
+                        <i class="fa-solid fa-plus"></i>
+                        CREATE ROOM
+                    </button>
+                    <button onclick="showJoinModal()" 
+                            class="border border-cyan-400 hover:bg-cyan-500/10 active:scale-95 transition-all text-cyan-300 font-semibold py-7 rounded-2xl flex items-center justify-center gap-3 text-lg">
+                        <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                        JOIN ROOM
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-10 text-center text-xs text-zinc-500">
+                Powered by WebRTC • No data stored on servers
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div id="join-modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-6">
+        <div class="glass border border-cyan-400/50 rounded-3xl p-10 w-full max-w-md">
+            <h3 class="text-3xl font-semibold mb-8 text-center">Join Group Call</h3>
+            
+            <input id="room-code" 
+                   maxlength="8"
+                   placeholder="ROOM CODE" 
+                   class="w-full text-center text-4xl bg-zinc-900 border border-cyan-400 rounded-2xl py-8 tracking-[6px] outline-none focus:border-cyan-300">
+            
+            <div class="flex gap-4 mt-10">
+                <button onclick="hideJoinModal()" 
+                        class="flex-1 py-5 border border-zinc-600 hover:bg-zinc-800 rounded-2xl font-medium">Cancel</button>
+                <button onclick="joinRoom()" 
+                        class="flex-1 py-5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-2xl">JOIN CALL</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Call Room -->
+    <div id="call-room" class="hidden flex flex-col h-screen">
+        <!-- Header -->
+        <header class="bg-zinc-900 border-b border-cyan-500/20 px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-9 h-9 bg-cyan-500 rounded-2xl flex items-center justify-center">
+                    <i class="fa-solid fa-headset text-black"></i>
+                </div>
+                <div>
+                    <div class="font-semibold text-xl" id="room-title">Shadow Voice</div>
+                    <div class="text-cyan-400 text-sm font-mono flex items-center gap-2" id="room-code-display"></div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <button onclick="copyInviteLink()" 
+                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-medium">
+                    <i class="fa-solid fa-share-nodes"></i>
+                    <span>Share</span>
+                </button>
+                <button onclick="leaveCall()" 
+                        class="flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-500 rounded-2xl text-sm font-medium">
+                    <i class="fa-solid fa-phone-slash"></i>
+                    <span>Leave</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Participants Grid -->
+        <div id="participants" class="flex-1 p-8 overflow-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+
+        <!-- Bottom Controls -->
+        <div class="bg-zinc-900 border-t border-cyan-500/20 p-6 flex items-center justify-center gap-8">
+            <button onclick="toggleMic()" id="mic-btn"
+                    class="control-btn w-16 h-16 bg-zinc-800 hover:bg-zinc-700 border border-cyan-400 rounded-3xl flex items-center justify-center text-4xl transition-all active:scale-95">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+            
+            <button onclick="copyRoomCode()" 
+                    class="px-8 py-4 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-400 text-cyan-300 rounded-3xl flex items-center gap-3 font-medium">
+                <i class="fa-solid fa-copy"></i>
+                <span class="hidden sm:inline">Copy Room Code</span>
+            </button>
+            
+            <div class="text-xs text-zinc-500 text-center max-w-[140px]">
+                <div id="participant-count">1 participant</div>
+                <div class="text-emerald-400">All connected via P2P</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+        let myStream = null;
+        let connections = {};
+        let username = "";
+        let roomCode = "";
+        let isMuted = false;
+        let participants = new Map();
+
+        function generateCode() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        async function getUserMedia() {
+            try {
+                myStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true },
+                    video: false 
+                });
+                return true;
+            } catch (err) {
+                alert("Microphone access is required for voice calls.");
+                return false;
+            }
+        }
+
+        function addParticipant(name, stream, isMe = false) {
+            const id = `p-${name}`;
+            if (document.getElementById(id)) return;
+
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = `participant-card glass border border-cyan-500/30 rounded-3xl p-6 neon-glow`;
+            div.innerHTML = `
+                <div class="flex flex-col items-center text-center">
+                    <div class="w-24 h-24 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-3xl flex items-center justify-center text-6xl font-bold mb-6 shadow-inner">
+                        ${name.substring(0, 1).toUpperCase()}
+                    </div>
+                    <div class="font-semibold text-2xl mb-1">${name}</div>
+                    <div class="text-emerald-400 text-sm font-mono flex items-center gap-1.5">
+                        <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                        LIVE
+                    </div>
+                </div>
+                <audio autoplay playsinline class="hidden"></audio>
+            `;
+
+            document.getElementById('participants').appendChild(div);
+            
+            const audio = div.querySelector('audio');
+            if (audio && stream) {
+                audio.srcObject = stream;
+            }
+
+            participants.set(name, div);
+            updateParticipantCount();
+        }
+
+        function updateParticipantCount() {
+            document.getElementById('participant-count').textContent = 
+                `\( {participants.size} participant \){participants.size > 1 ? 's' : ''}`;
+        }
+
+        function initPeer(isHost) {
+            peer = new Peer(isHost ? roomCode : undefined);
+
+            peer.on('open', (id) => {
+                console.log('%c✅ Connected as ' + id, 'color: #22d3ee');
+                if (!isHost) {
+                    const conn = peer.connect(roomCode);
+                    connections[roomCode] = conn;
+                }
+            });
+
+            peer.on('call', (call) => {
+                call.answer(myStream);
+                call.on('stream', (remoteStream) => {
+                    const name = call.peer.substring(0, 8);
+                    addParticipant(name, remoteStream);
+                });
+            });
+
+            peer.on('connection', (conn) => {
+                conn.on('open', () => {
+                    const call = peer.call(conn.peer, myStream);
+                    call.on('stream', (remoteStream) => {
+                        const name = conn.peer.substring(0, 8);
+                        addParticipant(name, remoteStream);
+                    });
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                if (err.type === 'unavailable-id') {
+                    alert("Room already in use or invalid. Try joining with correct code.");
+                }
+            });
+        }
+
+        // Public functions
+        window.createRoom = async function() {
+            username = (document.getElementById('username').value.trim() || "USER" + Math.floor(Math.random() * 9999)).toUpperCase();
+            roomCode = generateCode();
+
+            const mediaOk = await getUserMedia();
+            if (!mediaOk) return;
+
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('call-room').classList.remove('hidden');
+
+            setupRoomUI();
+            addParticipant(username, myStream, true);
+            initPeer(true);
+        }
+
+        window.showJoinModal = () => {
+            document.getElementById('join-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('room-code').focus(), 100);
+        };
+
+        window.hideJoinModal = () => document.getElementById('join-modal').classList.add('hidden');
+
+        window.joinRoom = async function() {
+            let code = document.getElementById('room-code').value.trim().toUpperCase();
+            if (code.length < 4) {
+                alert("Please enter a valid room code");
+                return;
+            }
+
+            roomCode = code;
+            username = (document.getElementById('username').value.trim() || "USER" + Math.floor(Math.random() * 9999)).toUpperCase();
+
+            const mediaOk = await getUserMedia();
+            if (!mediaOk) return;
+
+            hideJoinModal();
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('call-room').classList.remove('hidden');
+
+            setupRoomUI();
+            addParticipant(username, myStream, true);
+            initPeer(false);
+        }
+
+        function setupRoomUI() {
+            document.getElementById('room-title').textContent = "Shadow Voice";
+            document.getElementById('room-code-display').innerHTML = `
+                ROOM: <span class="text-white font-semibold">${roomCode}</span>
+            `;
+        }
+
+        window.toggleMic = function() {
+            if (!myStream) return;
+            isMuted = !isMuted;
+            myStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
+            
+            const btn = document.getElementById('mic-btn');
+            if (isMuted) {
+                btn.innerHTML = `<i class="fa-solid fa-microphone-slash text-red-400"></i>`;
+                btn.classList.add('border-red-400');
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-microphone"></i>`;
+                btn.classList.remove('border-red-400');
+            }
+        }
+
+        window.copyRoomCode = function() {
+            navigator.clipboard.writeText(roomCode).then(() => {
+                const orig = event.target.innerHTML;
+                event.target.innerHTML = `<i class="fa-solid fa-check"></i> COPIED!`;
+                setTimeout(() => {
+                    event.target.innerHTML = orig;
+                }, 1800);
+            });
+        }
+
+        window.copyInviteLink = function() {
+            const link = `\( {window.location.href.split('?')[0]}?room= \){roomCode}`;
+            navigator.clipboard.writeText(link).then(() => {
+                alert(`✅ Invite link copied!\n\nShare this with your friends:\n${link}`);
+            });
+        }
+
+        window.leaveCall = function() {
+            if (confirm("Leave this call?")) {
+                location.reload();
+            }
+        }
+
+        // Auto join from URL (for easy sharing)
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const urlRoom = params.get('room');
+            if (urlRoom) {
+                document.getElementById('room-code').value = urlRoom;
+                // Auto show join modal after small delay
+                setTimeout(() => {
+                    if (document.getElementById('login-screen').classList.contains('hidden') === false) {
+                        showJoinModal();
+                    }
+                }, 600);
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.key === "m" || e.key === "M") {
+                toggleMic();
+            }
+        });
+    </script>
+</body>
+  </html>
